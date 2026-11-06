@@ -1,0 +1,55 @@
+# Windows on ARM64 (Snapdragon): the app's tar.gz, built natively on GitHub's
+# windows-11-arm runner. Unsigned; an artifact, not a release. The build
+# scripts run as ARM64 there, so bindgen needs an ARM64 libclang.
+name: windows-arm64
+
+on:
+  push:
+    branches: [windows-arm64]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RUST_TOOLCHAIN: 1.95.0
+  ZIG_VERSION: 0.16.0
+  TARGET: aarch64-pc-windows-msvc
+
+jobs:
+  build:
+    runs-on: windows-11-arm
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ env.TARGET }}
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: libclang for bindgen
+        shell: pwsh
+        run: |
+          $dll = "C:\Program Files\LLVM\bin\libclang.dll"
+          if (-not (Test-Path $dll)) { throw "no LLVM at $dll on this runner image" }
+          "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - name: Build and pack
+        run: scripts/package "$TARGET"
+      - name: It runs
+        run: |
+          tar -xzf dist/herdr-app-windows-aarch64.tar.gz -C dist
+          dist/herdr-app/herdr-app.exe --version
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: herdr-app-windows-aarch64
+          path: dist/herdr-app-windows-aarch64.tar.gz
+          if-no-files-found: error
+          retention-days: 30
