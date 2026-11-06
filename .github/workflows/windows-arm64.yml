@@ -13,7 +13,6 @@ permissions:
 
 env:
   RUST_TOOLCHAIN: 1.95.0
-  ZIG_VERSION: 0.16.0
   TARGET: aarch64-pc-windows-msvc
 
 jobs:
@@ -32,9 +31,20 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: ${{ env.TARGET }}
-      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-        with:
-          version: ${{ env.ZIG_VERSION }}
+      # Zig's own ARM64 Windows build crashes (0xc0000005) building
+      # libghostty-vt: the x64 one runs under emulation and still targets
+      # aarch64-windows-msvc. build.rs takes it from ZIG.
+      - name: Zig (x64, emulated)
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP "zig.zip"
+          Invoke-WebRequest -UseBasicParsing https://ziglang.org/download/0.16.0/zig-x86_64-windows-0.16.0.zip -OutFile $zip
+          $got = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower()
+          if ($got -ne "68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e") { throw "zig sha256 $got" }
+          Expand-Archive $zip $env:RUNNER_TEMP
+          $zig = Join-Path $env:RUNNER_TEMP "zig-x86_64-windows-0.16.0\zig.exe"
+          & $zig version
+          "ZIG=$zig" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
       - name: libclang for bindgen
         shell: pwsh
         run: |
